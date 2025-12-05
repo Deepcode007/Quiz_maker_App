@@ -45,7 +45,7 @@ function token(req,res)
         name: name,
         uid: uid,
         role: role
-    }, JWT_KEY, {expiresIn: 60*10}) //10 minutes
+    }, JWT_KEY, {expiresIn: 60*15}) //10 minutes
 
     res.status(200).json({
         "success": true,

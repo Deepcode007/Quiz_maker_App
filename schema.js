@@ -25,7 +25,7 @@ const quizSchema = new mongoose.Schema(
 
 const signupzod = zod.object({
     name: zod.string({error: "Invalid name format"}),
-    email: zod.string().email({error: "Invalid email format"}),
+    email: zod.email({error: "Invalid email format"}),
     password: zod.string({error: "Invalid password format"})
     .min(4,{error: "Password minimum length is 4"})
     .max(30,{error: "Password maximum length is 30"}),
@@ -33,7 +33,7 @@ const signupzod = zod.object({
 })
 
 const signinzod = zod.object({
-    email: zod.string().email({error: "Invalid email format"}),
+    email: zod.email({error: "Invalid email format"}),
     password: zod.string({error: "Invalid password format"})
     .min(4,{error: "Password minimum length is 4"})
     .max(30,{error: "Password maximum length is 30"})
