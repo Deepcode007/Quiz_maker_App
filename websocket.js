@@ -1,14 +1,12 @@
-const { title } = require("process");
-const { mongoose, jwt} = require("./import")
+const { verify } = require("crypto");
+const { mongoose, jwt, WebSocketServer} = require("./import")
 const {usermodel, quizmodel} = require("./schema")
 const url = require('url');
 const JWT_KEY = process.env.JWT_KEY
-
-const {WebSocketServer} = require("ws")
-const wss= new WebSocketServer({port: 3001})
+const wss= new WebSocketServer({port: 3001},()=> console.log("Listening WSS 3001"))
 
 let livequiz = {}
-
+let running = []
 function auth(ws,token,req)
 {
     if(token==undefined)
@@ -20,8 +18,9 @@ function auth(ws,token,req)
             }))
             return false;
         }
+        let data;
         try{
-            let data = jwt.verify(token, JWT_KEY)
+            data = jwt.verify(token, JWT_KEY)
             req.uid = data.uid
             req.role = data.role
             req.name = data.name
@@ -30,7 +29,7 @@ function auth(ws,token,req)
         catch(err)
         {
             ws.send(JSON.stringify({
-                "type": "ERROR",
+                "type": "ERROR1",
                 "success": false,
                 "message": "Unauthorized or invalid data"
             }))
@@ -99,7 +98,7 @@ async function quizverify(ws, quizid,req)
 }
 
 wss.on("connection",(ws,req)=>{
-    let token = url.parse(req.url, true).query.token;
+    let token = url.parse(req.url, true).query.token.toString();
     let quizid = url.parse(req.url, true).query.quizId;
 
     if(! auth(ws,token,req) || ! quizverify(ws,quizid,req)) ws.close();
@@ -149,7 +148,7 @@ function messagehandler(data, req, ws)
     if(data.type=="START_QUIZ") startquiz(data, req, ws);
     else if(data.type =="SHOW_QUESTION") showq(data, ws);
     else if(data.type == "SHOW_RESULT") result(data, req, ws);
-    else if(data.type == "END_QUIZ") end(ws); 
+    else if(data.type == "END_QUIZ") end(data, ws); 
 }
 
 function startquiz(data, req, ws)
@@ -159,6 +158,7 @@ function startquiz(data, req, ws)
     "quizId": "quiz123",
     "message": "Quiz is now live"
     }))
+    running.push(url.parse(req.url, true).query.quizId)
     let users = livequiz[data.quizId].users
 
     Object.keys(users).forEach(key => {
@@ -215,12 +215,12 @@ function submit(data, ws, req)
     let qid = data.questionId
     let uid = req.uid
     
-    if(!livequiz[quizId])
+    if(!running.find(x=>x==quizId))
     {
         ws.send(JSON.stringify({
             "type": "ERROR",
             "success": false,
-            "message": "Invalid quizId or unauthorized"
+            "message": "Invalid quizId or ended!"
         }));
         return;
     }
@@ -328,4 +328,47 @@ function result(data, req, ws)
     })
 
     ws.send(JSON.stringify(obj));
+}
+
+function end(data, ws)
+{
+    let quizId = data.quizId
+    if(!running.find(x=>x==quizId))
+    {
+        ws.send(JSON.stringify({
+            "type": "ERROR",
+            "success": false,
+            "message": "Invalid quizId or ended!"
+        }));
+        return;
+    }
+    running = running.filter(x=>x!=quizId)
+    let users = livequiz[quizId].users
+    Object.keys(users).forEach(x=>{
+        users[x].ws.send(JSON.stringify({
+            "type": "Quiz_End",
+            quizId: quizId,
+            name: users[x].name,
+            score: users[x].score
+        }))
+
+    })
+    ws.send(JSON.stringify(livequiz[quizId].users))
+    
+    // reseting the quiz to its initial state;
+    let quiz = livequiz[quizId]
+    let ans = {}
+    for(let i of quiz.questions)
+    {
+        ans[i._id]={}
+    }
+    livequiz[quizid] = {
+        quizId: quizid,
+        title: quiz.title,
+        currentQuestionId: null,
+        questions: quiz.questions,
+        users: {},
+        answers: ans
+    }
+
 }
